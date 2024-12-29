@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MAVProxy WebChat</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        h1 {
+            text-align: center;
+            margin: 10px 0;
+            font-size: 24px;
+        }
+        #chat-container {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 10px;
+        }
+        #status {
+            border: 1px solid #ccc;
+            padding: 10px;
+            background-color: #f9f9f9;
+            text-align: center;
+            font-size: 16px;
+        }
+        #chat {
+            border: 1px solid #ccc;
+            padding: 10px;
+            height: 400px;
+            overflow-y: auto;
+            background-color: #fff;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        .message {
+            margin: 5px 0;
+            display: flex;
+        }
+        .message.user {
+            justify-content: flex-end;
+        }
+        .message.ai {
+            justify-content: flex-start;
+        }
+        .bubble {
+            padding: 10px;
+            border-radius: 10px;
+            max-width: 70%;
+            word-wrap: break-word;
+        }
+        .bubble.user {
+            background-color: #007bff;
+            color: white;
+            text-align: right;
+        }
+        .bubble.ai {
+            background-color: #f1f0f0;
+            color: black;
+            text-align: left;
+        }
+        #message-input {
+            display: flex;
+            gap: 10px;
+        }
+        #message {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        #send {
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        #send:hover {
+            background-color: #0056b3;
+        }
+
+        /* スマホ向けのレスポンシブデザイン */
+        @media (max-width: 600px) {
+            h1 {
+                font-size: 20px;
+            }
+            #chat-container {
+                padding: 5px;
+            }
+            #status {
+                font-size: 14px;
+            }
+            #chat {
+                height: 300px;
+                font-size: 14px;
+            }
+            .bubble {
+                font-size: 14px;
+                padding: 8px;
+            }
+            #message {
+                font-size: 14px;
+            }
+            #send {
+                padding: 8px 15px;
+                font-size: 14px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>MAVProxy WebChat</h1>
+    <div id="chat-container">
+        <div id="status">Status: Ready</div>
+        <div id="chat"></div>
+        <div id="message-input">
+            <textarea id="message" placeholder="Enter message" rows="1"></textarea>
+            <button id="send">Send</button>
+        </div>
+    </div>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const socket = io();
+
+            const statusElement = document.getElementById('status');
+            const chatElement = document.getElementById('chat');
+            const messageInput = document.getElementById('message');
+
+            function sendMessage() {
+                const message = messageInput.value.trim();
+                if (!message) return;
+                addMessage('user', message);
+                socket.emit('send_message', message);
+                messageInput.value = '';
+            }
+
+            function addMessage(sender, text) {
+                const messageDiv = document.createElement('div');
+                messageDiv.classList.add('message', sender);
+                const bubbleDiv = document.createElement('div');
+                bubbleDiv.classList.add('bubble', sender);
+                bubbleDiv.textContent = text;
+                messageDiv.appendChild(bubbleDiv);
+                chatElement.appendChild(messageDiv);
+                chatElement.scrollTop = chatElement.scrollHeight;
+            }
+
+            document.getElementById('send').addEventListener('click', sendMessage);
+
+            messageInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                }
+            });
+
+            socket.on('status_update', (status) => {
+                statusElement.textContent = `Status: ${status}`;
+            });
+
+            socket.on('receive_message', (data) => {
+                addMessage('ai', data);
+            });
+        });
+    </script>
+</body>
+</html>

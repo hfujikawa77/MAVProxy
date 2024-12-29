@@ -13,7 +13,7 @@ AP_FLAKE8_CLEAN
 
 from MAVProxy.modules.lib import mp_module
 from MAVProxy.modules.lib import mp_util
-from MAVProxy.modules.mavproxy_chat import chat_window
+from MAVProxy.modules.mavproxy_chat import chat_window, chat_webui
 from pymavlink import mavutil
 from threading import Thread
 import time
@@ -24,9 +24,12 @@ class chat(mp_module.MPModule):
 
         # call parent class
         super(chat, self).__init__(mpstate, "chat", "OpenAI chat support")
+        
+        # 新しいchat_webuiインスタンスを初期化
+        self.chat_webui = chat_webui.chat_webui(mpstate)
 
         # register module and commands
-        self.add_command('chat', self.cmd_chat, "chat module", ["show"])
+        self.add_command('chat', self.cmd_chat, "chat module", ["show", "webui"])
 
         # keep reference to mpstate
         self.mpstate = mpstate
@@ -58,6 +61,9 @@ class chat(mp_module.MPModule):
             print(self.usage())
         elif args[0] == "show":
             self.show()
+        elif args[0] == "webui":
+            self.chat_webui.start_server()
+            print("Web UI server started at http://localhost:5000")
         else:
             print(self.usage())
 

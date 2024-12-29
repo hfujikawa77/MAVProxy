@@ -17,6 +17,7 @@ package_data = ['modules/mavproxy_map/data/*.jpg',
                 'modules/mavproxy_magical/data/*.mtl',
                 'modules/mavproxy_magical/data/*.obj',
                 'modules/mavproxy_fieldcheck/*.txt',
+                'modules/mavproxy_chat/templates/*.html',
                 'tools/graphs/*.xml',
 ]
 
