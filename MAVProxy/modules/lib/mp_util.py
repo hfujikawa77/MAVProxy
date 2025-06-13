@@ -10,6 +10,7 @@ import sys
 import platform
 import warnings
 import time
+import re
 from math import cos, sin, tan, atan2, sqrt, radians, degrees, pi, log, fmod
 
 # Some platforms (CYGWIN and others) many not have the wx library
@@ -402,7 +403,7 @@ def decode_devid(devid, pname):
         0x05 : "BMM150 ",
         0x06 : "LSM9DS1",
         0x08 : "LIS3MDL",
-        0x09 : "AK09916",
+        0x09 : "AK0991x",
         0x0A : "IST8310",
         0x0B : "ICM20948",
         0x0C : "MMC3416",
@@ -414,6 +415,8 @@ def decode_devid(devid, pname):
         0x12 : "RM3100_2",
         0x13 : "MMC5883",
         0x14 : "AK09918",
+        0x15 : "AK09915",
+        0x16 : "QMC5883P",
         }
 
     imu_types = {
@@ -471,6 +474,11 @@ def decode_devid(devid, pname):
         0x0E : "BARO_MSP",
         0x0F : "BARO_ICP101XX",
         0x10 : "BARO_ICP201XX",
+        0x11 : "BARO_MS5607",
+        0x12 : "BARO_MS5837",
+        0x13 : "BARO_MS5637",
+        0x14 : "BARO_BMP390",
+        0x15 : "BARO_BMP581",
     }
 
     airspeed_types = {
@@ -565,3 +573,14 @@ def get_gps_time(tnow):
     t_ms = int(tnow * 1000) % 1000
     week_ms = (epoch_seconds % SEC_PER_WEEK) * 1000 + ((t_ms//200) * 200)
     return week, week_ms
+
+    
+
+def natural_sort_key(s):
+    '''a sort key for natural sorting, where embedded integers are sorted separately'''
+    return [int(text) if text.isdigit() else text.lower()
+                for text in re.split('([0-9]+)', s)]
+
+def sorted_natural(lst):
+    '''sort using a 'natural' sort order'''
+    return sorted(lst, key=natural_sort_key)

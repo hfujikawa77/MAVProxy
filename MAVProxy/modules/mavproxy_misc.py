@@ -102,9 +102,12 @@ class MiscModule(mp_module.MPModule):
         self.add_command('hardfault_autopilot', self.cmd_hardfault_autopilot, "hardfault autopilot")
         self.add_command('panic_autopilot', self.cmd_panic_autopilot, "panic autopilot")
         self.add_command('longloop_autopilot', self.cmd_longloop_autopilot, "cause long loop in autopilot")
+        self.add_command('configerror_autopilot', self.cmd_config_error_autopilot, "ask autopilot to jump to its config error loop")  # noqa:E501
         self.add_command('internalerror_autopilot', self.cmd_internalerror_autopilot, "cause internal error in autopilot")
         self.add_command('dfu_boot', self.cmd_dfu_boot, "boot into DFU mode")
         self.add_command('deadlock', self.cmd_deadlock, "trigger deadlock")
+        self.add_command('nullptr_read', self.cmd_nullptr_read, "read from a very low address")
+        self.add_command('nullptr_write', self.cmd_nullptr_write, "write to a very low address")
         self.add_command('batreset', self.cmd_battery_reset, "reset battery remaining")
         self.add_command('setorigin', self.cmd_setorigin, "set global origin")
         self.add_command('magsetfield', self.cmd_magset_field, "set expected mag field by field")
@@ -117,6 +120,9 @@ class MiscModule(mp_module.MPModule):
         self.add_command('gear', self.cmd_landing_gear, "landing gear control")
 
         self.repeats = []
+
+        # support for changing altitude via command rather than mission item:
+        self.accepts_DO_CMD_CHANGE_ALTITUDE = {}  # keyed by (sysid, compid)
 
     def altitude_difference(self, pressure1, pressure2, ground_temp):
         '''calculate barometric altitude'''
@@ -260,9 +266,21 @@ class MiscModule(mp_module.MPModule):
         '''boot into DFU bootloader without hold'''
         self.cmd_dosomethingreallynastyto_autopilot(args, 'DFU-boot-without-hold', 99)
 
+    def cmd_config_error_autopilot(self, args):
+        '''Ask the autopilot to jump into its config error loop'''
+        self.cmd_dosomethingreallynastyto_autopilot(args, 'config-loop', 101)
+
     def cmd_deadlock(self, args):
         '''trigger a mutex deadlock'''
         self.cmd_dosomethingreallynastyto_autopilot(args, 'mutex-deadlock', 100)
+
+    def cmd_nullptr_write(self, args):
+        '''write to a low address (nullptr-deref)'''
+        self.cmd_dosomethingreallynastyto_autopilot(args, 'nullptr-deref-write', 102)
+
+    def cmd_nullptr_read(self, args):
+        '''read from a low address (nullptr-deref)'''
+        self.cmd_dosomethingreallynastyto_autopilot(args, 'nullptr-deref-read', 103)
 
     def cmd_battery_reset(self, args):
         '''reset battery remaining'''
@@ -285,6 +303,29 @@ class MiscModule(mp_module.MPModule):
         print("%s (%s)\n" % (time.ctime(tusec * 1.0e-6), time.ctime()))
 
     def _cmd_changealt(self, alt, frame):
+        '''send commands.  May send both if we don't know which is the
+        right one to set'''
+        key = (self.target_system, self.target_component)
+        supports = self.accepts_DO_CMD_CHANGE_ALTITUDE.get(key, None)
+        if supports or supports is None:
+            self.master.mav.command_long_send(
+                self.settings.target_system,
+                self.settings.target_component,
+                mavutil.mavlink.MAV_CMD_DO_CHANGE_ALTITUDE,
+                0,        # confirmation
+                alt,      # p1
+                frame,    # p2
+                0,
+                0,
+                0,
+                0,
+                0
+            )
+            print(f"Sent change altitude command for {alt:.2f} meters")
+
+        if supports is True:
+            return
+
         self.master.mav.mission_item_send(self.settings.target_system,
                                           self.settings.target_component,
                                           0,
@@ -292,7 +333,7 @@ class MiscModule(mp_module.MPModule):
                                           mavutil.mavlink.MAV_CMD_NAV_WAYPOINT,
                                           3, 1, 0, 0, 0, 0,
                                           0, 0, alt)
-        print("Sent change altitude command for %.1f meters" % alt)
+        print("Sent change altitude mission item command for %.1f meters" % alt)
 
     def cmd_changealt(self, args):
         '''change target altitude'''
@@ -645,6 +686,22 @@ Alt: gear <extend|retract> [ID]'''
             DesiredState,
             0, 0, 0, 0, 0, 0
         )
+
+    def mavlink_packet(self, m):
+        '''handle an incoming mavlink packet'''
+        mtype = m.get_type()
+
+        if mtype == "COMMAND_ACK":
+            # check to see if the vehicle has bounced our attempts to
+            # set the current mission item via mavlink command (as
+            # opposed to the old message):
+            if m.command == mavutil.mavlink.MAV_CMD_DO_CHANGE_ALTITUDE:
+                key = (m.get_srcSystem(), m.get_srcComponent())
+                if m.result == mavutil.mavlink.MAV_RESULT_UNSUPPORTED:
+                    # stop sending the commands:
+                    self.accepts_DO_CMD_CHANGE_ALTITUDE[key] = False
+                elif m.result in [mavutil.mavlink.MAV_RESULT_ACCEPTED]:
+                    self.accepts_DO_CMD_CHANGE_ALTITUDE[key] = True
 
     def idle_task(self):
         '''called on idle'''

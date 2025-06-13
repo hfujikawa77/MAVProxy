@@ -197,6 +197,16 @@ class KmlReadModule(mp_module.MPModule):
         layer.set_colour((red, green, blue))
         self.add_map_object(layer)
 
+    def add_object_to_maps(self, obj):
+        '''add an object to all maps'''
+        for mp in self.module_matching('map*'):
+            mp.map.add_object(obj)
+
+    def remove_object_from_maps(self, obj):
+        '''remove an object from all maps'''
+        for mp in self.module_matching('map*'):
+            mp.map.remove_object(obj.key)
+
     def remove_map_object(self, obj):
         '''remove an object from our stored list of objects, and the map
         module if it is loaded'''
@@ -207,9 +217,7 @@ class KmlReadModule(mp_module.MPModule):
         del self.map_objects[obj.layer][obj.key]
         if len(self.map_objects[obj.layer]) == 0:
             del self.map_objects[obj.layer]
-        map_module = self.mpstate.map
-        if map_module is not None:
-            map_module.remove_object(obj.key)
+        self.remove_object_from_maps(obj.key)
 
     def remove_all_map_objects(self):
         for layer in copy.deepcopy(self.map_objects):
@@ -220,20 +228,17 @@ class KmlReadModule(mp_module.MPModule):
         '''add an object to our stored list of objects, and the map
         module if it is loaded'''
         if obj.layer in self.map_objects and obj.key in self.map_objects[obj.layer]:
-            raise ValueError(f"Already have self.map_objects[{obj.layer=}][{obj.key=}]")
+            print(f"Already have self.map_objects[{obj.layer=}][{obj.key=}]")
+            return
         if obj.layer not in self.map_objects:
             self.map_objects[obj.layer] = {}
         self.map_objects[obj.layer][obj.key] = obj
-
-        map_module = self.mpstate.map
-        if map_module is not None:
-            map_module.add_object(obj)
+        self.add_object_to_maps(obj)
 
     def add_objects_to_map_module_from_map_objects(self):
         for layer in self.map_objects:
             for obj in self.map_objects[layer].values():
-                map_module = self.mpstate.map
-                map_module.add_object(obj)
+                self.add_object_to_maps(obj)
 
     def fencekml(self, args):
         '''create a geofence from a layername'''
@@ -314,19 +319,20 @@ class KmlReadModule(mp_module.MPModule):
         self.curtextlayers = []
         self.menu_needs_refreshing = True
 
-    def add_polygon(self, name, coords):
+    def add_polygon(self, name, coords, line_colour=None):
         '''add a polygon to the KML list.  coords is a list of lat/lng tuples in degrees'''
         self.snap_points.extend(coords)
 
         # print("Adding " + name)
-        newcolour = (random.randint(0, 255), 0, random.randint(0, 255))
+        if line_colour is None:
+            line_colour = (random.randint(0, 255), 0, random.randint(0, 255))
         layer_name = f"{name}-{self.counter}"
         curpoly = mp_slipmap.SlipPolygon(
             layer_name,
             coords,
             layer=2,
             linewidth=2,
-            colour=newcolour,
+            colour=line_colour,
         )
         self.add_map_object(curpoly)
         self.allayers.append(curpoly)
@@ -336,7 +342,9 @@ class KmlReadModule(mp_module.MPModule):
     def loadkml(self, filename):
         '''Load a kml from file and put it on the map'''
         # Open the zip file
-        nodes = kmlread.readkmz(filename)
+        kml = kmlread.KMLRead(filename)
+        kml.parse()
+        nodes = kml.placemark_nodes()
 
         self.snap_points = []
 
@@ -346,41 +354,40 @@ class KmlReadModule(mp_module.MPModule):
             return
         for n in nodes:
             try:
-                point = kmlread.readObject(n)
+                point = kml.readObject(n)
             except Exception:
                 continue
             if point is None:
                 continue
 
             # and place any polygons on the map
-            (pointtype, name, coords) = point
-            if pointtype == 'Polygon':
-                self.add_polygon(name, coords)
+            if isinstance(point, kmlread.Polygon):
+                self.add_polygon(point.name, point.vertexes, point.line_colour)
 
             # and points - barrell image and text
-            if pointtype == 'Point':
-                # print("Adding " + point[1])
+            if isinstance(point, kmlread.Point):
+                # print("Adding " + point.name)
                 curpoint = mp_slipmap.SlipIcon(
-                    point[1],
-                    latlon=(point[2][0][0], point[2][0][1]),
+                    point.name,
+                    latlon=point.latlon,
                     layer=3,
                     img='barrell.png',
                     rotation=0,
                     follow=False,
                 )
                 curtext = mp_slipmap.SlipLabel(
-                    point[1],
-                    point=(point[2][0][0], point[2][0][1]),
+                    point.name,
+                    point=point.latlon,
                     layer=4,
-                    label=point[1],
+                    label=point.name,
                     colour=(0, 255, 255),
                 )
                 self.add_map_object(curpoint)
                 self.add_map_object(curtext)
                 self.allayers.append(curpoint)
                 self.alltextlayers.append(curtext)
-                self.curlayers.append(point[1])
-                self.curtextlayers.append(point[1])
+                self.curlayers.append(point.name)
+                self.curtextlayers.append(point.name)
         self.menu_needs_refreshing = True
 
     def idle_task(self):

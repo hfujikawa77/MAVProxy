@@ -171,7 +171,7 @@ class LinkModule(mp_module.MPModule):
                                   str(self.status.counters['MasterIn'][master.linknum]) + "," +
                                   str(self.status.bytecounters['MasterIn'][master.linknum].total()) + "," +
                                   str(linkdelay) + "," +
-                                  str(100 * round(master.packet_loss(), 3)) + "\n")
+                                  str(round(master.packet_loss(), 3)) + "\n")
 
         # update outstanding TimeSyncRequest objects.  Reap any which
         # are past their use-by date:
@@ -1054,6 +1054,10 @@ class LinkModule(mp_module.MPModule):
             if self.mpstate.settings.mavfwd_rate or mtype != 'REQUEST_DATA_STREAM':
                 if mtype not in self.no_fwd_types:
                     for r in self.mpstate.mav_outputs:
+                        if hasattr(r, 'ws') and r.ws is not None:
+                            from wsproto.connection import ConnectionState
+                            if r.ws.state != ConnectionState.OPEN:  # Ensure Websocket handshake is done
+                                continue
                         r.write(m.get_msgbuf())
 
             sysid = m.get_srcSystem()

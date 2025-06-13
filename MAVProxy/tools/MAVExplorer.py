@@ -454,6 +454,13 @@ def cmd_map(args):
     options._flightmodes = mestate.mlog._flightmodes
     options.show_flightmode_legend = mestate.settings.show_flightmode
     options.colour_source='flightmode'
+
+    # check for kml or kmz
+    for a in args:
+        if a.endswith('.kml') or a.endswith('.kmz'):
+            options.kml = a
+            args = list(filter(lambda x : x != a, args))
+            break
     if len(args) > 0:
         options.types = ':'.join(args)
         filtered_args = list(filter(lambda x : x != "CMD", options.types))
@@ -726,9 +733,13 @@ events = {
     73 : "DATA_LAND_REPO_ACTIVE",
     74 : "DATA_STANDBY_ENABLE",
     75 : "DATA_STANDBY_DISABLE",
+    76 : "FENCE_ALT_MAX_ENABLE",
+    77 : "FENCE_ALT_MAX_DISABLE",
 
     80 : "FENCE_FLOOR_ENABLE",
     81 : "FENCE_FLOOR_DISABLE",
+    82 : "FENCE_POLYGON_ENABLE",
+    83 : "FENCE_POLYGON_DISABLE",
 
     85 : "EK3_SOURCES_SET_TO_PRIMARY",
     86 : "EK3_SOURCES_SET_TO_SECONDARY",
@@ -1167,7 +1178,7 @@ def cmd_param(args):
             verbose = True
     else:
         wildcard = '*'
-    k = sorted(mlog.params.keys())
+    k = mp_util.sorted_natural(mlog.params.keys())
     for p in k:
         if fnmatch.fnmatch(str(p).upper(), wildcard.upper()):
             s = "%-16.16s %f" % (str(p), mlog.params[p])
